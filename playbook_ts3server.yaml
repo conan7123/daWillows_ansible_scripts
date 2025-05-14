@@ -1,0 +1,53 @@
+---
+- hosts: voice
+  become: yes
+  gather_facts: no
+
+  tasks:
+  - name: get latest version
+    uri: url="https://teamspeak.com/versions/server.json" return_content=yes
+    register: tscom
+
+  - debug: msg="updating to version {{ (tscom.content|from_json)['linux']['x86_64']['version'] }}"
+
+  - name: create teamspeak group
+    group: name=ts3
+    become: yes
+
+  - name: create teamspeak user
+    user: name=ts3 group=ts3
+    become: yes
+
+  - name: create download directory
+    file: path=/home/ts3/Downloads state=directory owner=ts3 group=ts3
+    become: yes
+
+  - name: download teamspeak server
+    get_url: url={{ (tscom.content|from_json)['linux']['x86_64']['mirrors']['teamspeak.com'] }}  dest=/home/ts3/Downloads/teamspeak-server-{{ (tscom.content|from_json)['linux']['x86_64']['version'] }}.tar.bz2
+    become: yes
+    become_user: ts3
+
+  - name: copy the start script
+    copy: src=./playbook_files/voice/teamspeak3server.service dest=/etc/systemd/system/teamspeak3server.service mode=664 owner=root group=root
+    become: yes
+
+  - name: register start script to systemd
+    systemd: daemon_reload=yes
+    become: yes
+
+  - name: stop teamspeak
+    service: name=teamspeak3server state=stopped
+    become: yes
+
+  - name: create teamspeak directory
+    file: name=/opt/teamspeak state=directory owner=ts3 group=ts3
+    become: yes
+
+  - name: extract teamspeak
+    unarchive: copy=no src=/home/ts3/Downloads/teamspeak-server-{{ (tscom.content|from_json)['linux']['x86_64']['version'] }}.tar.bz2 dest=/opt/teamspeak/ owner=ts3 group=ts3
+    become: yes
+    become_user: ts3
+
+  - name: enable and start teamspeak
+    service: name="teamspeak3server" state=started enabled=yes
+    become: yes
